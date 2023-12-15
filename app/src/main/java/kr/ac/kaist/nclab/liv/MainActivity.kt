@@ -11,7 +11,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -37,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -72,6 +77,7 @@ class MainActivity : ComponentActivity() {
                 .height(55.dp)
                 .fillMaxWidth(),
             shape = RoundedCornerShape(size = 20.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF29394C), contentColor = Color(0xFFFFFFFF))
         ) {
             Text(
                 text = txt,
@@ -88,7 +94,7 @@ class MainActivity : ComponentActivity() {
         lineHeight = 31.09.sp,
         fontFamily = FontFamily(Font(R.font.roboto)),
         fontWeight = FontWeight(300),
-        color = Color.Black,
+        color = Color.White,
         textAlign = TextAlign.Center
     )
 
@@ -99,6 +105,11 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF16283C))
+            )
+
             val navCont = rememberNavController()
 
             val context = LocalContext.current
@@ -140,14 +151,13 @@ class MainActivity : ComponentActivity() {
                 for (i in contours.indices) {
                     val contour = contours[i]
                     val size = Imgproc.contourArea(contour)
-                    Log.d("www", "www")
                     if (size > 3000) {
                         goodContours.add(contour)
                     }
                 }
 
                 if (goodContours.size != 4) {
-                    photoResult = "Failed!! Please re-take the photo."
+                    photoResult = ""
                     navCont.navigate("fail") {
                         popUpTo(navCont.graph.findStartDestination().id) {
                             saveState = true
@@ -169,7 +179,14 @@ class MainActivity : ComponentActivity() {
                     Imgproc.cvtColor(oriMat, matHSV, Imgproc.COLOR_RGB2HSV)
                     resultH = (matHSV[cy, cx][0] * 2).toInt()
                     photoResult = "OK! HUE: $resultH"
-                    navCont.navigate("doneGood") {
+                    val toGo:String
+                    if (resultH > 20) {
+                        toGo = "doneGood"
+                    }
+                    else {
+                        toGo = "doneBad"
+                    }
+                    navCont.navigate(toGo) {
                         popUpTo(navCont.graph.findStartDestination().id) {
                             saveState = true
                         }
@@ -183,7 +200,7 @@ class MainActivity : ComponentActivity() {
                     Handler(Looper.getMainLooper()).postDelayed({
                         tempPhotoUri = context.createTempPictureUri()
                         cameraLauncher.launch(tempPhotoUri)
-                    }, 2000)
+                    }, 1000)
                 }
             }
             NavHost(navController = navCont, startDestination = "hi") {
@@ -202,8 +219,8 @@ class MainActivity : ComponentActivity() {
                                 fontSize = 26.sp,
                                 lineHeight = 31.09.sp,
                                 fontFamily = FontFamily(Font(R.font.roboto)),
-                                fontWeight = FontWeight(800),
-                                color = Color.Black,
+                                fontWeight = FontWeight(300),
+                                color = Color.White,
                                 textAlign = TextAlign.Center
                             ),
                             modifier = Modifier.wrapContentHeight()
@@ -228,7 +245,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         Spacer(modifier = Modifier.weight(1.0f))
                         Text(
-                            text = "다시 찍겟습니다",
+                            text = "Please retry",
                             style = commonTextStyle,
                             modifier = Modifier.wrapContentHeight()
                         )
@@ -244,45 +261,81 @@ class MainActivity : ComponentActivity() {
                 composable("doneGood") {
                     Column(
                         modifier = Modifier
-                            .padding(horizontal = 28.dp)
                             .fillMaxSize(),
-                        verticalArrangement = Arrangement.Bottom,
+                        verticalArrangement = Arrangement.Top,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Spacer(modifier = Modifier.weight(1.0f))
-                        Text(
-                            text = "좋은 결과: $photoResult",
-                            style = commonTextStyle,
-                            modifier = Modifier.wrapContentHeight()
+                        Image(
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            painter = painterResource(id = R.drawable.normal),
+                            contentDescription = null,
                         )
-                        Spacer(modifier = Modifier.weight(1.0f))
-                        normalButton(pv = PaddingValues(bottom = 16.dp), txt = "다시찍") {
-                            tempPhotoUri = context.createTempPictureUri()
-                            cameraLauncher.launch(tempPhotoUri)
+                        Button(
+                            onClick = {
+                                navCont.navigate("hi") {
+                                    popUpTo(navCont.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    this.launchSingleTop = true
+                                }
+                            },
+                            modifier = Modifier
+                                .padding(horizontal = 28.dp)
+                                .height(55.dp)
+                                .fillMaxWidth(),
+                            shape = RoundedCornerShape(size = 20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF29394C), contentColor = Color(0xFFFFFFFF))
+                        ) {
+                            Text(
+                                text = "Close",
+                                style = TextStyle(
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight(300),
+                                    textAlign = TextAlign.Center
+                                )
+                            )
                         }
-                        Spacer(modifier = Modifier.weight(0.1f))
                     }
                 }
                 composable("doneBad") {
                     Column(
                         modifier = Modifier
-                            .padding(horizontal = 28.dp)
                             .fillMaxSize(),
-                        verticalArrangement = Arrangement.Bottom,
+                        verticalArrangement = Arrangement.Top,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Spacer(modifier = Modifier.weight(1.0f))
-                        Text(
-                            text = "나쁜 결과: $photoResult",
-                            style = commonTextStyle,
-                            modifier = Modifier.wrapContentHeight()
+                        Image(
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            painter = painterResource(id = R.drawable.abnormal),
+                            contentDescription = null,
                         )
-                        Spacer(modifier = Modifier.weight(1.0f))
-                        normalButton(pv = PaddingValues(bottom = 16.dp), txt = "다시찍") {
-                            tempPhotoUri = context.createTempPictureUri()
-                            cameraLauncher.launch(tempPhotoUri)
+                        Button(
+                            onClick = {
+                                navCont.navigate("hi") {
+                                    popUpTo(navCont.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    this.launchSingleTop = true
+                                }
+                            },
+                            modifier = Modifier
+                                .padding(horizontal = 28.dp)
+                                .height(55.dp)
+                                .fillMaxWidth(),
+                            shape = RoundedCornerShape(size = 20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF29394C), contentColor = Color(0xFFFFFFFF))
+                        ) {
+                            Text(
+                                text = "Close",
+                                style = TextStyle(
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight(300),
+                                    textAlign = TextAlign.Center
+                                )
+                            )
                         }
-                        Spacer(modifier = Modifier.weight(0.1f))
                     }
                 }
             }
