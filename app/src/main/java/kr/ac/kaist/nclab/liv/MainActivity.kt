@@ -4,20 +4,22 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -31,16 +33,22 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import kr.ac.kaist.nclab.liv.analyzer.createTempPictureUri
 import kr.ac.kaist.nclab.liv.ui.theme.LivTheme
 import org.opencv.android.OpenCVLoader
@@ -75,13 +83,14 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
-    @Composable
-    fun BitmapImage(bitmap: Bitmap) {
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "some useful description",
-        )
-    }
+    val commonTextStyle = TextStyle(
+        fontSize = 24.sp,
+        lineHeight = 31.09.sp,
+        fontFamily = FontFamily(Font(R.font.roboto)),
+        fontWeight = FontWeight(300),
+        color = Color.Black,
+        textAlign = TextAlign.Center
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,12 +99,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            LivTheme {
-                // A surface container using the 'background' color from the theme
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    Greeting("Android")
-                }
-            }
+            val navCont = rememberNavController()
 
             val context = LocalContext.current
             // The most recently successfully taken photo
@@ -103,10 +107,8 @@ class MainActivity : ComponentActivity() {
             // Temporary URL holder for ActivityResultContract
             var tempPhotoUri by remember { mutableStateOf(value = Uri.EMPTY) }
             var thh by remember { mutableDoubleStateOf(value = 70.0) }
-            var photoResult by remember {mutableStateOf(value = "")}
-            var coreColorHSV by remember { mutableStateOf(value = DoubleArray(3)) }
-            var coreColorAmp by remember { mutableIntStateOf(value = 0) }
-            var coreColorOri by remember { mutableStateOf(value = DoubleArray(3))}
+            var photoResult by remember { mutableStateOf(value = "") }
+            var resultH by remember { mutableIntStateOf(value = 0) }
 
             val cameraLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.TakePicture(), onResult = { success ->
                 Log.d("TTT", "success?: $success, uri: $tempPhotoUri")
@@ -116,27 +118,19 @@ class MainActivity : ComponentActivity() {
                 val bitmapImg: Bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, recentPhotoUri)) { decoder, _, _ -> decoder.isMutableRequired = true }
                 val mat = Mat()
                 Utils.bitmapToMat(bitmapImg, mat)
-                Log.d("dd", "1")
 
 
-                Imgproc.cvtColor(mat, mat, Imgproc.COLOR_RGB2GRAY)
                 // 이진화
-                Log.d("dd", "2")
+                Imgproc.cvtColor(mat, mat, Imgproc.COLOR_RGB2GRAY)
                 Imgproc.GaussianBlur(mat, mat, Size(5.0, 5.0), 0.0)
                 Imgproc.threshold(mat, mat, 70.0, 255.0, Imgproc.THRESH_BINARY_INV)
-                //Imgproc.adaptiveThreshold(mat, mat, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY_INV, 11, 12.0)
-                //Imgproc.Canny(mat, mat, lowerT, highT)
-
-//                // 이진화
-//                Imgproc.threshold(mat, mat, 240.0, 255.0, Imgproc.THRESH_BINARY_INV)
-//                Log.d("dd", "3")
 
                 // 윤곽선 검출
                 val contours: List<MatOfPoint> = ArrayList()
                 val hierarchy = Mat()
                 Imgproc.findContours(mat, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
-                Log.d("dd", "4")
 
+                //마킹
                 Imgproc.cvtColor(mat, mat, Imgproc.COLOR_GRAY2RGB)
 
                 val oriMat = Mat()
@@ -145,25 +139,21 @@ class MainActivity : ComponentActivity() {
                 val goodContours: MutableList<MatOfPoint> = ArrayList()
                 for (i in contours.indices) {
                     val contour = contours[i]
-                    val size = Imgproc.contourArea(contours[i])
+                    val size = Imgproc.contourArea(contour)
+                    Log.d("www", "www")
                     if (size > 3000) {
-                        Log.d("cnt", "$size")
-                        Imgproc.drawContours(mat, contours, i, Scalar(0.0, 255.0, 0.0), -1)
                         goodContours.add(contour)
-
-                        val m = Imgproc.moments(contour)
-                        val cx = (m._m10 / m._m00)
-                        val cy = (m._m01 / m._m00)
-                        Imgproc.drawMarker(oriMat, Point(cx, cy), Scalar(255.0, 0.0, 0.0), Imgproc.MARKER_SQUARE, 5)
-
-                    }
-                    else {
-                        //Imgproc.drawContours(mat, contours, i, Scalar(255.0, 0.0, 0.0), -1)
                     }
                 }
 
                 if (goodContours.size != 4) {
                     photoResult = "Failed!! Please re-take the photo."
+                    navCont.navigate("fail") {
+                        popUpTo(navCont.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        this.launchSingleTop = true
+                    }
                     return@rememberLauncherForActivityResult
                 }
                 else {
@@ -175,56 +165,127 @@ class MainActivity : ComponentActivity() {
                         cx += ((m._m10 / m._m00) / goodContours.size).toInt()
                         cy += ((m._m01 / m._m00) / goodContours.size).toInt()
                     }
-                    val HSVmat = Mat()
-                    Imgproc.cvtColor(oriMat, HSVmat, Imgproc.COLOR_RGB2HSV)
-                    coreColorHSV = HSVmat[cy, cx]
-                    photoResult = "OK! HUE: ${coreColorHSV[0].toInt() * 2}"
-                    coreColorAmp = android.graphics.Color.HSVToColor(floatArrayOf(coreColorHSV[0].toFloat() * 2, coreColorHSV[1].toFloat(), coreColorHSV[2].toFloat()))
-                    coreColorOri = oriMat[cy, cx]
-
-                    Imgproc.drawMarker(oriMat, Point(cx.toDouble(), cy.toDouble()), Scalar(0.0, 0.0, 255.0), Imgproc.MARKER_STAR, 10)
+                    val matHSV = Mat()
+                    Imgproc.cvtColor(oriMat, matHSV, Imgproc.COLOR_RGB2HSV)
+                    resultH = (matHSV[cy, cx][0] * 2).toInt()
+                    photoResult = "OK! HUE: $resultH"
+                    navCont.navigate("doneGood") {
+                        popUpTo(navCont.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        this.launchSingleTop = true
+                    }
                 }
-                val bitmapRawResult: Bitmap = Bitmap.createBitmap(bitmapImg)
-                val bitmapResult: Bitmap = Bitmap.createBitmap(bitmapImg)
-                Utils.matToBitmap(oriMat, bitmapResult)
-                Utils.matToBitmap(mat, bitmapRawResult)
-                Log.d("fdsa", "END")
             })
-            Column {
-                normalButton(pv = PaddingValues(bottom = 16.dp), txt = "Yes") {
-                    tempPhotoUri = context.createTempPictureUri()
-                    cameraLauncher.launch(tempPhotoUri)
-                }
 
-                Slider(value = thh.toFloat(), onValueChange = {
-                    thh = it.toDouble()
-                }, valueRange = 0f..255f, steps = 0)
-                Text(text = photoResult)
-                Box(modifier = Modifier
-                    .background(color = Color(coreColorAmp))
-                    .height(160.dp)
-                    .fillMaxWidth())
-                Box(modifier = Modifier
-                    .background(color = Color(coreColorOri[0].toInt(), coreColorOri[1].toInt(), coreColorOri[2].toInt()))
-                    .height(160.dp)
-                    .fillMaxWidth())
+            navCont.addOnDestinationChangedListener { _, dest, _ ->
+                if (dest.route == "fail") {
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        tempPhotoUri = context.createTempPictureUri()
+                        cameraLauncher.launch(tempPhotoUri)
+                    }, 2000)
+                }
+            }
+            NavHost(navController = navCont, startDestination = "hi") {
+                composable("hi") {
+                    Column(
+                        modifier = Modifier
+                            .padding(horizontal = 28.dp)
+                            .fillMaxSize(),
+                        verticalArrangement = Arrangement.Bottom,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.weight(1.0f))
+                        Text(
+                            text = "Do you want to register a band test result?",
+                            style = TextStyle(
+                                fontSize = 26.sp,
+                                lineHeight = 31.09.sp,
+                                fontFamily = FontFamily(Font(R.font.roboto)),
+                                fontWeight = FontWeight(800),
+                                color = Color.Black,
+                                textAlign = TextAlign.Center
+                            ),
+                            modifier = Modifier.wrapContentHeight()
+                        )
+                        Spacer(modifier = Modifier.weight(1.0f))
+                        normalButton(pv = PaddingValues(bottom = 16.dp), txt = "Yes") {
+                            tempPhotoUri = context.createTempPictureUri()
+                            cameraLauncher.launch(tempPhotoUri)
+                        }
+                        Slider(value = thh.toFloat(), onValueChange = {
+                            thh = it.toDouble()
+                        }, valueRange = 0f..255f, steps = 0)
+                    }
+                }
+                composable("fail") {
+                    Column(
+                        modifier = Modifier
+                            .padding(horizontal = 28.dp)
+                            .fillMaxSize(),
+                        verticalArrangement = Arrangement.Bottom,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.weight(1.0f))
+                        Text(
+                            text = "다시 찍겟습니다",
+                            style = commonTextStyle,
+                            modifier = Modifier.wrapContentHeight()
+                        )
+                        Spacer(modifier = Modifier.weight(1.0f))
+                        Text(
+                            text = photoResult,
+                            style = commonTextStyle,
+                            modifier = Modifier.wrapContentHeight()
+                        )
+                        Spacer(modifier = Modifier.weight(0.1f))
+                    }
+                }
+                composable("doneGood") {
+                    Column(
+                        modifier = Modifier
+                            .padding(horizontal = 28.dp)
+                            .fillMaxSize(),
+                        verticalArrangement = Arrangement.Bottom,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.weight(1.0f))
+                        Text(
+                            text = "좋은 결과: $photoResult",
+                            style = commonTextStyle,
+                            modifier = Modifier.wrapContentHeight()
+                        )
+                        Spacer(modifier = Modifier.weight(1.0f))
+                        normalButton(pv = PaddingValues(bottom = 16.dp), txt = "다시찍") {
+                            tempPhotoUri = context.createTempPictureUri()
+                            cameraLauncher.launch(tempPhotoUri)
+                        }
+                        Spacer(modifier = Modifier.weight(0.1f))
+                    }
+                }
+                composable("doneBad") {
+                    Column(
+                        modifier = Modifier
+                            .padding(horizontal = 28.dp)
+                            .fillMaxSize(),
+                        verticalArrangement = Arrangement.Bottom,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.weight(1.0f))
+                        Text(
+                            text = "나쁜 결과: $photoResult",
+                            style = commonTextStyle,
+                            modifier = Modifier.wrapContentHeight()
+                        )
+                        Spacer(modifier = Modifier.weight(1.0f))
+                        normalButton(pv = PaddingValues(bottom = 16.dp), txt = "다시찍") {
+                            tempPhotoUri = context.createTempPictureUri()
+                            cameraLauncher.launch(tempPhotoUri)
+                        }
+                        Spacer(modifier = Modifier.weight(0.1f))
+                    }
+                }
             }
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    LivTheme {
-        Greeting("Android")
     }
 }
